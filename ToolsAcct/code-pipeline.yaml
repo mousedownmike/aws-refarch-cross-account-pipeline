@@ -1,29 +1,29 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: CodePipeline for the Sample Lambda Function
+Description: CodePipeline for a SAM application
 Parameters:
-  projectName:
-    Description: Name of the Project
-    Type: String
-    Default: sample-lambda
-  artifactBucket:
-    Description: S3 Bucket, which will hold the artifacts
-    Type: String
   repositoryName:
-    Description: The name of the GitHub repository with the source
+    Description: The name of the GitHub repository containing the code to be built. This will also be used as the project name.
     Type: String
-    Default: Pinkfish-ai/pf-api
+  repositoryOrganization:
+    Description: The name of the GitHub organization containing the repository to be built
+    Type: String
   repositoryBranch:
     Description: The name of the GitHub branch with the source
     Type: String
-    Default: main
+  codestarConnectionArn:
+    Description: The ARN of the CodeStar connection to GitHub
+    Type: String
+  artifactBucket:
+    Description: S3 Bucket, which will hold the artifacts
+    Type: String
   devAccount:
     Description: AWS account number for DEV
     Type: String
   prodAccount:
     Description: AWS account number for PROD
     Type: String
-  CMKARN:
-    Description: ARN of the KMS CMK creates in Tools account
+  s3KmsKeyArn:
+    Description: ARN of the KMS CMK creates in Tools account. For cross-account actions, you can only use the key ID or key ARN to identify the key.
     Type: String
   CrossAccountCondition:
     Description: Conditionally creates the resources for cross account access
@@ -31,14 +31,14 @@ Parameters:
     Default: false
 
 Conditions:
-  AddCodeBuildResource: !Equals [ !Ref CrossAccountCondition, true ]
+  AddCodeBuildResource: !Equals [ !Ref CrossAccountCondition, 'true' ]
 
 Resources:
 
   BuildProjectRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${projectName}-CodeBuildRole
+      RoleName: !Sub ${repositoryName}-CodeBuildRole
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -54,7 +54,7 @@ Resources:
     Type: AWS::IAM::Policy
     DependsOn: S3BucketPolicy
     Properties:
-      PolicyName: !Sub ${projectName}-CodeBuildPolicy
+      PolicyName: !Sub ${repositoryName}-CodeBuildPolicy
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -73,7 +73,7 @@ Resources:
             Effect: Allow
             Action:
               - kms:*
-            Resource: !Ref CMKARN
+            Resource: !Ref s3KmsKeyArn
           -
             Effect: Allow
             Action:
@@ -87,9 +87,9 @@ Resources:
   BuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: !Ref projectName
-      Description: !Ref projectName
-      EncryptionKey: !Ref CMKARN
+      Name: !Ref repositoryName
+      Description: !Ref repositoryName
+      EncryptionKey: !Ref s3KmsKeyArn
       ServiceRole: !GetAtt BuildProjectRole.Arn
       Artifacts:
         Type: CODEPIPELINE
@@ -98,36 +98,20 @@ Resources:
         ComputeType: BUILD_GENERAL1_LARGE
         Image: aws/codebuild/standard:7.0
         EnvironmentVariables:
-          - Name: S3Bucket
+          - Name: ARTIFACT_BUCKET
             Value: !Ref artifactBucket
-          - Name: KMSKey
-            Value: !Ref CMKARN
       Source:
         Type: CODEPIPELINE
-        BuildSpec: |
-          version: 0.2
-          phases:
-            install:
-              runtime-versions:
-                  python: 3.7
-            build:
-              commands:
-                - pip install --upgrade pip
-                - pip install pipenv --user
-                - pip install awscli aws-sam-cli
-                - sam package --template-file template.yaml --s3-bucket $S3Bucket --output-template-file packaged-template.yml --region $AWS_REGION
-          artifacts:
-            files:
-              - packaged-template.yml
-
+        BuildSpec: 'buildspec.yml'
+        InsecureSsl: false
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
       TimeoutInMinutes: 10
-      Tags:
-        - Key: Name
-          Value: !Ref projectName
   PipeLineRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${projectName}-codepipeline-role
+      RoleName: !Sub ${repositoryName}-codepipeline-role
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -143,7 +127,7 @@ Resources:
     Type: AWS::IAM::Policy
     DependsOn: S3BucketPolicy
     Properties:
-      PolicyName: !Sub ${projectName}-codepipeline-policy
+      PolicyName: !Sub ${repositoryName}-codepipeline-policy
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -180,7 +164,7 @@ Resources:
             Effect: Allow
             Action:
               - kms:Decrypt
-            Resource: !Ref CMKARN
+            Resource: !Ref s3KmsKeyArn
           -
             Effect: Allow
             Action:
@@ -217,11 +201,11 @@ Resources:
                 Category: Source
                 Provider: CodeStarSourceConnection
               OutputArtifacts:
-                - Name: PfSource
+                - Name: GitHubSourceArtifact
               RunOrder: 1
               Configuration:
-                ConnectionArn: 'arn:aws:codestar-connections:us-east-1:637423303118:connection/0e7327b3-8818-49e6-8d38-fbc97609a485'
-                FullRepositoryId: !Ref repositoryName
+                ConnectionArn: !Ref codestarConnectionArn
+                FullRepositoryId: !Sub '${repositoryOrganization}/${repositoryName}'
                 BranchName: !Ref repositoryBranch
                 OutputArtifactFormat: 'CODE_ZIP'
         -
@@ -238,23 +222,23 @@ Resources:
               ProjectName: !Ref BuildProject
             RunOrder: 1
             InputArtifacts:
-              - Name: SCCheckoutArtifact
+              - Name: GitHubSourceArtifact
             OutputArtifacts:
-              - Name: BuildOutput
+              - Name: BuildOutputArtifact
         - Name: DeployToTest
           Actions:
-            - Name: CreateChangeSetTest
+            - Name: CreateChangeSetDev
               ActionTypeId:
                 Category: Deploy
                 Owner: AWS
                 Version: 1
                 Provider: CloudFormation
               Configuration:
-                ChangeSetName: sample-lambda-test
+                ChangeSetName: codepipeline-dev
                 ActionMode: CHANGE_SET_REPLACE
-                StackName: sample-lambda-test
+                StackName: !Ref repositoryName
                 Capabilities: CAPABILITY_NAMED_IAM
-                TemplatePath: BuildOutput::packaged-template.yml
+                TemplatePath: BuildOutputArtifact::packaged-template.yml
                 #RoleArn: !Sub arn:aws:iam::${devAccount}:role/cloudformationdeployer-role
                 RoleArn:
                   Fn::If:
@@ -262,7 +246,7 @@ Resources:
                   - !Sub arn:aws:iam::${devAccount}:role/cloudformationdeployer-role
                   - !Ref AWS::NoValue
               InputArtifacts:
-                - Name: BuildOutput
+                - Name: BuildOutputArtifact
               RunOrder: 1
               #RoleArn: !Sub arn:aws:iam::${devAccount}:role/ToolsAcctCodePipelineCloudFormationRole
               RoleArn:
@@ -270,16 +254,16 @@ Resources:
                   - AddCodeBuildResource
                   - !Sub arn:aws:iam::${devAccount}:role/ToolsAcctCodePipelineCloudFormationRole
                   - !Ref AWS::NoValue
-            - Name: DeployChangeSetTest
+            - Name: DeployChangeSetDev
               ActionTypeId:
                 Category: Deploy
                 Owner: AWS
                 Version: 1
                 Provider: CloudFormation
               Configuration:
-                ChangeSetName: sample-lambda-test
+                ChangeSetName: codepipeline-dev
                 ActionMode: CHANGE_SET_EXECUTE
-                StackName: sample-lambda-test
+                StackName: !Ref repositoryName
                 #RoleArn: !Sub arn:aws:iam::${devAccount}:role/cloudformationdeployer-role
                 RoleArn:
                   Fn::If:
@@ -287,7 +271,7 @@ Resources:
                   - !Sub arn:aws:iam::${devAccount}:role/cloudformationdeployer-role
                   - !Ref AWS::NoValue
               InputArtifacts:
-                - Name: BuildOutput
+                - Name: BuildOutputArtifact
               RunOrder: 2
               #RoleArn: !Sub arn:aws:iam::${devAccount}:role/ToolsAcctCodePipelineCloudFormationRole
               RoleArn:
@@ -305,7 +289,7 @@ Resources:
               Version: 1
               Provider: Manual
             Configuration:
-              CustomData: "Log into the TEST account and test out your changes before approving."
+              CustomData: "Verify DEV before production."
         - Name: DeployToProduction
           Actions:
             - Name: CreateChangeSetProd
@@ -315,9 +299,9 @@ Resources:
                 Version: 1
                 Provider: CloudFormation
               Configuration:
-                ChangeSetName: sample-lambda-production
+                ChangeSetName: codepipeline-prod
                 ActionMode: CHANGE_SET_REPLACE
-                StackName: sample-lambda-production
+                StackName: !Ref repositoryName
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: BuildOutput::packaged-template.yml
                 #RoleArn: !Sub arn:aws:iam::${prodAccount}:role/cloudformationdeployer-role
@@ -327,7 +311,7 @@ Resources:
                   - !Sub arn:aws:iam::${prodAccount}:role/cloudformationdeployer-role
                   - !Ref AWS::NoValue
               InputArtifacts:
-                - Name: BuildOutput
+                - Name: BuildOutputArtifact
               RunOrder: 1
               #RoleArn: !Sub arn:aws:iam::${prodAccount}:role/ToolsAcctCodePipelineCloudFormationRole
               RoleArn:
@@ -342,7 +326,7 @@ Resources:
                 Version: 1
                 Provider: CloudFormation
               Configuration:
-                ChangeSetName: sample-lambda-production
+                ChangeSetName: codepipeline-prod
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: sample-lambda-production
                 #RoleArn: !Sub arn:aws:iam::${prodAccount}:role/cloudformationdeployer-role
@@ -352,7 +336,7 @@ Resources:
                   - !Sub arn:aws:iam::${prodAccount}:role/cloudformationdeployer-role
                   - !Ref AWS::NoValue
               InputArtifacts:
-                - Name: BuildOutput
+                - Name: BuildOutputArtifact
               RunOrder: 2
               #RoleArn: !Sub arn:aws:iam::${prodAccount}:role/ToolsAcctCodePipelineCloudFormationRole
               RoleArn:
@@ -365,7 +349,7 @@ Resources:
         Type: S3
         Location: !Ref artifactBucket
         EncryptionKey:
-          Id: !Ref CMKARN
+          Id: !Ref s3KmsKeyArn
           Type: KMS
   S3BucketPolicy:
     Type: AWS::S3::BucketPolicy

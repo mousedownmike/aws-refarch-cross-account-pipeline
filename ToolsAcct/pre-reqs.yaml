@@ -11,7 +11,7 @@ Resources:
   KmsKey:
     Type: AWS::KMS::Key
     Properties:
-      Description: Used by target account roles to access artifacts in the artifact bucket
+      Description: KMS key used to encrypt and decrypt shared build artifacts across accounts
       EnableKeyRotation: true
       KeyPolicy:
         Version: '2012-10-17'
@@ -43,7 +43,7 @@ Resources:
               AWS:
                 - !Sub arn:aws:iam::${prodAccount}:root
                 - !Sub arn:aws:iam::${devAccount}:root
-                - !Sub arn:aws:iam::${AWS::AccountId}:role/CodeBuildRole
+                - !GetAtt [BuildProjectRole,Arn]
             Action:
               - kms:Encrypt
               - kms:Decrypt
@@ -61,6 +61,76 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
 
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Statement:
+          -
+            Action:
+              - s3:*
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:s3:::${ArtifactBucket}
+              - !Sub arn:aws:s3:::${ArtifactBucket}/*
+            Principal:
+              AWS:
+                - !Sub arn:aws:iam::${devAccount}:role/ToolsAcctCodePipelineCloudFormationRole
+                - !Sub arn:aws:iam::${devAccount}:role/cloudformationdeployer-role
+                - !Sub arn:aws:iam::${prodAccount}:role/ToolsAcctCodePipelineCloudFormationRole
+                - !Sub arn:aws:iam::${prodAccount}:role/cloudformationdeployer-role
+                - !GetAtt [BuildProjectRole,Arn]
+
+  BuildProjectRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodeBuildRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+  BuildProjectPolicy:
+    Type: AWS::IAM::Policy
+    DependsOn: S3BucketPolicy
+    Properties:
+      PolicyName: CodeBuildPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetBucketPolicy
+              - s3:GetObject
+              - s3:ListBucket
+
+            Resource:
+              - !Join ['',['arn:aws:s3:::',!Ref ArtifactBucket, '/*']]
+              - !Join ['',['arn:aws:s3:::',!Ref ArtifactBucket]]
+          -
+            Effect: Allow
+            Action:
+              - kms:*
+            Resource: !GetAtt KmsKey.Arn
+          -
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+      Roles:
+        -
+          !Ref BuildProjectRole
 Outputs:
   S3KmsKeyArn:
     Value: !GetAtt KmsKey.Arn

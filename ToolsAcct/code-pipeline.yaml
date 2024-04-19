@@ -25,6 +25,9 @@ Parameters:
   s3KmsKeyArn:
     Description: ARN of the KMS CMK creates in Tools account. For cross-account actions, you can only use the key ID or key ARN to identify the key.
     Type: String
+  codebuildRoleArn:
+    Description: ARN of the Tools account CodeBuild role
+    Type: String
   CrossAccountCondition:
     Description: Conditionally creates the resources for cross account access
     Type: String
@@ -34,63 +37,13 @@ Conditions:
   AddCodeBuildResource: !Equals [ !Ref CrossAccountCondition, 'true' ]
 
 Resources:
-
-  BuildProjectRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: CodeBuildRole
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          -
-            Effect: Allow
-            Principal:
-              Service:
-                - codebuild.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      Path: /
-  BuildProjectPolicy:
-    Type: AWS::IAM::Policy
-    DependsOn: S3BucketPolicy
-    Properties:
-      PolicyName: !Sub ${repositoryName}-CodeBuildPolicy
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          -
-            Effect: Allow
-            Action:
-              - s3:PutObject
-              - s3:GetBucketPolicy
-              - s3:GetObject
-              - s3:ListBucket
-
-            Resource:
-             - !Join ['',['arn:aws:s3:::',!Ref artifactBucket, '/*']]
-             - !Join ['',['arn:aws:s3:::',!Ref artifactBucket]]
-          -
-            Effect: Allow
-            Action:
-              - kms:*
-            Resource: !Ref s3KmsKeyArn
-          -
-            Effect: Allow
-            Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-            Resource: arn:aws:logs:*:*:*
-      Roles:
-        -
-          !Ref BuildProjectRole
   BuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
       Name: !Ref repositoryName
       Description: !Ref repositoryName
       EncryptionKey: !Ref s3KmsKeyArn
-      ServiceRole: !GetAtt BuildProjectRole.Arn
+      ServiceRole: !Ref codebuildRoleArn
       Artifacts:
         Type: CODEPIPELINE
       Environment:
@@ -125,7 +78,6 @@ Resources:
       Path: /
   PipelinePolicy:
     Type: AWS::IAM::Policy
-    DependsOn: S3BucketPolicy
     Properties:
       PolicyName: !Sub ${repositoryName}-codepipeline-policy
       PolicyDocument:
@@ -351,23 +303,3 @@ Resources:
         EncryptionKey:
           Id: !Ref s3KmsKeyArn
           Type: KMS
-  S3BucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: !Ref artifactBucket
-      PolicyDocument:
-        Statement:
-          -
-            Action:
-              - s3:*
-            Effect: Allow
-            Resource:
-              - !Sub arn:aws:s3:::${artifactBucket}
-              - !Sub arn:aws:s3:::${artifactBucket}/*
-            Principal:
-              AWS:
-                - !Sub arn:aws:iam::${devAccount}:role/ToolsAcctCodePipelineCloudFormationRole
-                - !Sub arn:aws:iam::${devAccount}:role/cloudformationdeployer-role
-                - !Sub arn:aws:iam::${prodAccount}:role/ToolsAcctCodePipelineCloudFormationRole
-                - !Sub arn:aws:iam::${prodAccount}:role/cloudformationdeployer-role
-                - !GetAtt [BuildProjectRole,Arn]

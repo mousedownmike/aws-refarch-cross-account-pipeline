@@ -7,10 +7,6 @@ Parameters:
   prodAccount:
     Description: AWS account number for PROD
     Type: String
-  projectName:
-    Description: Name of the Project
-    Type: String
-    Default: sample-lambda
 Resources:
   KmsKey:
     Type: AWS::KMS::Key
@@ -47,7 +43,7 @@ Resources:
               AWS:
                 - !Sub arn:aws:iam::${prodAccount}:root
                 - !Sub arn:aws:iam::${devAccount}:root
-                - !Sub arn:aws:iam::${AWS::AccountId}:role/${projectName}-CodeBuildRole
+                - !Sub arn:aws:iam::${AWS::AccountId}:role/CodeBuildRole
             Action:
               - kms:Encrypt
               - kms:Decrypt

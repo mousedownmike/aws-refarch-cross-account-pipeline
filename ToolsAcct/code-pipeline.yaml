@@ -38,7 +38,7 @@ Resources:
   BuildProjectRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${repositoryName}-CodeBuildRole
+      RoleName: CodeBuildRole
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:

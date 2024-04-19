@@ -75,6 +75,7 @@ Resources:
               - !Sub arn:aws:s3:::${ArtifactBucket}
               - !Sub arn:aws:s3:::${ArtifactBucket}/*
             Principal:
+              ### MANUAL STEP
               AWS:
                 - !Sub arn:aws:iam::${devAccount}:role/ToolsAcctCodePipelineCloudFormationRole
                 - !Sub arn:aws:iam::${devAccount}:role/cloudformationdeployer-role

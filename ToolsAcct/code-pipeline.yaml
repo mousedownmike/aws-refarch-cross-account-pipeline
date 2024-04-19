@@ -86,6 +86,7 @@ Resources:
           -
             Effect: Allow
             Action:
+              - 'codestar-connections:UseConnection'
               - codepipeline:*
               - iam:ListRoles
               - cloudformation:Describe*
@@ -116,6 +117,10 @@ Resources:
             Effect: Allow
             Action:
               - kms:Decrypt
+              - 'kms:Decrypt'
+              - 'kms:Encrypt'
+              - 'kms:GenerateDataKey'
+              - 'kms:DescribeKey'
             Resource: !Ref s3KmsKeyArn
           -
             Effect: Allow
@@ -191,7 +196,7 @@ Resources:
                 StackName: !Ref repositoryName
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: BuildOutputArtifact::packaged-template.yml
-                #RoleArn: !Sub arn:aws:iam::${devAccount}:role/cloudformationdeployer-role
+#                RoleArn: !Sub arn:aws:iam::${devAccount}:role/cloudformationdeployer-role
                 RoleArn:
                   Fn::If:
                   - AddCodeBuildResource
@@ -200,7 +205,7 @@ Resources:
               InputArtifacts:
                 - Name: BuildOutputArtifact
               RunOrder: 1
-              #RoleArn: !Sub arn:aws:iam::${devAccount}:role/ToolsAcctCodePipelineCloudFormationRole
+#              RoleArn: !Sub arn:aws:iam::${devAccount}:role/ToolsAcctCodePipelineCloudFormationRole
               RoleArn:
                   Fn::If:
                   - AddCodeBuildResource
@@ -216,7 +221,7 @@ Resources:
                 ChangeSetName: codepipeline-dev
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: !Ref repositoryName
-                #RoleArn: !Sub arn:aws:iam::${devAccount}:role/cloudformationdeployer-role
+#                RoleArn: !Sub arn:aws:iam::${devAccount}:role/cloudformationdeployer-role
                 RoleArn:
                   Fn::If:
                   - AddCodeBuildResource
@@ -225,7 +230,7 @@ Resources:
               InputArtifacts:
                 - Name: BuildOutputArtifact
               RunOrder: 2
-              #RoleArn: !Sub arn:aws:iam::${devAccount}:role/ToolsAcctCodePipelineCloudFormationRole
+#              RoleArn: !Sub arn:aws:iam::${devAccount}:role/ToolsAcctCodePipelineCloudFormationRole
               RoleArn:
                   Fn::If:
                   - AddCodeBuildResource
@@ -256,7 +261,7 @@ Resources:
                 StackName: !Ref repositoryName
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: BuildOutput::packaged-template.yml
-                #RoleArn: !Sub arn:aws:iam::${prodAccount}:role/cloudformationdeployer-role
+#                RoleArn: !Sub arn:aws:iam::${prodAccount}:role/cloudformationdeployer-role
                 RoleArn:
                   Fn::If:
                   - AddCodeBuildResource
@@ -265,7 +270,7 @@ Resources:
               InputArtifacts:
                 - Name: BuildOutputArtifact
               RunOrder: 1
-              #RoleArn: !Sub arn:aws:iam::${prodAccount}:role/ToolsAcctCodePipelineCloudFormationRole
+#              RoleArn: !Sub arn:aws:iam::${prodAccount}:role/ToolsAcctCodePipelineCloudFormationRole
               RoleArn:
                   Fn::If:
                   - AddCodeBuildResource
@@ -281,7 +286,7 @@ Resources:
                 ChangeSetName: codepipeline-prod
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: sample-lambda-production
-                #RoleArn: !Sub arn:aws:iam::${prodAccount}:role/cloudformationdeployer-role
+#                RoleArn: !Sub arn:aws:iam::${prodAccount}:role/cloudformationdeployer-role
                 RoleArn:
                   Fn::If:
                   - AddCodeBuildResource
@@ -290,7 +295,7 @@ Resources:
               InputArtifacts:
                 - Name: BuildOutputArtifact
               RunOrder: 2
-              #RoleArn: !Sub arn:aws:iam::${prodAccount}:role/ToolsAcctCodePipelineCloudFormationRole
+#              RoleArn: !Sub arn:aws:iam::${prodAccount}:role/ToolsAcctCodePipelineCloudFormationRole
               RoleArn:
                 Fn::If:
                 - AddCodeBuildResource

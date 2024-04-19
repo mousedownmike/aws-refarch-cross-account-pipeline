@@ -81,6 +81,7 @@ Resources:
           -
             Effect: Allow
             Action:
+              - dynamodb:*
               - lambda:AddPermission
               - lambda:CreateFunction
               - lambda:DeleteFunction

@@ -82,6 +82,8 @@ Resources:
             Effect: Allow
             Action:
               - dynamodb:*
+              - iam:*
+              - codedeploy:*
               - lambda:AddPermission
               - lambda:CreateFunction
               - lambda:DeleteFunction
@@ -92,6 +94,10 @@ Resources:
               - lambda:GetFunction
               - lambda:UpdateFunctionConfiguration
               - lambda:ListTags
+              - lambda:ListVersionsByFunction
+              - lambda:PublishVersion
+              - lambda:CreateAlias
+              - lambda:DeleteAlias
               - lambda:TagResource
               - lambda:UnTagResource
               # - events:* # Required for the sample lambda function to work
@@ -107,6 +113,7 @@ Resources:
               - iam:DetachRolePolicy
               - apigateway:POST # Create API.
               - apigateway:GET # Get API info.
+              - apigateway:PUT
               - apigateway:PATCH # Update API resources.
               - apigateway:DELETE # Delete API incase of rollback. 
             Resource: "*"

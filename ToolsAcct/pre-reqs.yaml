@@ -120,6 +120,11 @@ Resources:
           -
             Effect: Allow
             Action:
+              - codebuild:*
+            Resource: *
+          -
+            Effect: Allow
+            Action:
               - kms:*
             Resource: !GetAtt KmsKey.Arn
           -
